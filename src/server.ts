@@ -10,21 +10,33 @@ const prisma = new PrismaClient()
 
 const app = new Elysia()
 .use(cors({
-  allowedHeaders: "*"
+  credentials: true,
 }))
+.use(cookie())
 .use(
   jwt({
       name: 'jwt',
       secret: process.env.JWT_SECRET as string
   })
 )
-.use(cookie())
-.derive( async ({jwt, cookie: { token }}) => {
-  const profile = await jwt.verify(token)
-  return { profile }
+.derive(async ({jwt, cookie, headers}) => {
+  const auth = headers.authorization
+  if(auth) {
+    const convert = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    const profile = await jwt.verify(convert!)
+    return { profile }
+  } else {
+  return false
+  }
+  
 })
-
 .get("/", () => "server Runx is running ")
+.get("/getCookie", async({ jwt, cookie }) => {
+  console.log(cookie)
+  return {
+    status: false
+  }
+})
 /////////////////////////////////////////////////////guard///////////////////////////////////////////////
 .guard({
   beforeHandle: ({set,profile}) =>{
@@ -50,7 +62,10 @@ const app = new Elysia()
         .post("/edit/user/:id", async ({body,params, set})=> {
           try {
             const userBody = body
+            console.log(params)
+            console.log("----")
             const userId: number = parseInt(params.id)
+            console.log(userId)
             const res = await updateUser(userBody, userId)
             if (res.status == "ok") {
               return {message: "Edit successful"}
@@ -189,15 +204,18 @@ const app = new Elysia()
         status: false,
       }
     }
-    setCookie('token', await jwt.sign({
+    setCookie('authToken', await jwt.sign({
       email: userData.email
     }), {
       httpOnly: true,
       maxAge: 7 * 86400,
     })
+
+    console.log(cookie)
+
     return {
       status: true,
-      token: cookie.token,
+      token: cookie.authToken,
       userr: { "userid": res.query?.id,
                 "firstname": res.query?.firstname
       }
